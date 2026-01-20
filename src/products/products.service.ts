@@ -1,59 +1,102 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm'; // <--- Import quan trọng
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'; // <--- Đã thêm NotFoundException
+import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { Product } from './entities/product.entity'; // <--- Nhớ import Entity
+import { Product } from './entities/product.entity';
 
 @Injectable()
 export class ProductsService {
-  // 1. PHẢI CÓ CONSTRUCTOR ĐỂ KHAI BÁO REPOSITORY
   constructor(
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
   ) {}
 
-  // 2. PHẢI CÓ TỪ KHÓA ASYNC
   async create(createProductDto: CreateProductDto) {
-    console.log('1. Đã vào hàm create Service'); 
+    // console.log('1. Đã vào hàm create Service'); 
 
-    // Kiểm tra có đơn vị cơ bản chưa
-    const hasBaseUnit = createProductDto.units.some(u => u.is_base_unit === true);
-    if (!hasBaseUnit) {
-      console.log('2. Lỗi validation logic'); 
+    const baseUnits = createProductDto.units.filter(u => u.is_base_unit === true);
+    if (baseUnits.length === 0) {
+      throw new BadRequestException('Phải có ít nhất một đơn vị cơ bản');
+    }
+    if (baseUnits.length > 1) {
+      throw new BadRequestException('Chỉ được phép có duy nhất một đơn vị cơ bản (Base Unit)');
+    }
+    if (!baseUnits.length) {
       throw new BadRequestException('Sản phẩm phải có ít nhất một đơn vị cơ bản (is_base_unit = true)');
     }
 
-    console.log('3. Bắt đầu tạo đối tượng'); 
     const newProduct = this.productRepository.create({
       ...createProductDto,
       product_units: createProductDto.units,
     });
 
-    console.log('4. Bắt đầu lưu vào Database'); 
-    
-    // Lưu vào DB
-    const result = await this.productRepository.save(newProduct);
-    
-    console.log('5. Đã lưu xong!'); 
-    return result;
+    return await this.productRepository.save(newProduct);
   }
 
   findAll() {
     return this.productRepository.find({
-      relations: ['product_units'], // Lấy luôn cả đơn vị tính kèm theo
+      relations: ['product_units'],
     });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} product`;
+  // Sửa tạm hàm này để trả về đúng kiểu Promise
+  async findOne(id: number) {
+    const product = await this.productRepository.findOne({
+        where: { id },
+        relations: ['product_units'],
+    });
+    if (!product) throw new NotFoundException(`Không tìm thấy sản phẩm ${id}`);
+    return product;
   }
 
-  update(id: number, updateProductDto: UpdateProductDto) {
-    return `This action updates a #${id} product`;
-  }
+  async update(id: number, updateProductDto: UpdateProductDto) {
+    if (updateProductDto.units) {
+      const baseUnits = updateProductDto.units.filter(u => u.is_base_unit === true);
+      if (baseUnits.length > 1) {
+         throw new BadRequestException('Trong danh sách cập nhật đang có nhiều hơn 1 đơn vị cơ bản');
+      }
+    // 1. Tìm sản phẩm cũ
+    const product = await this.productRepository.findOne({
+      where: { id },
+      relations: ['product_units'],
+    });
 
-  remove(id: number) {
-    return `This action removes a #${id} product`;
+    if (!product) {
+      throw new NotFoundException(`Không tìm thấy sản phẩm có id ${id}`);
+    }
+
+    // 2. Xử lý xóa các Unit thừa
+    if (updateProductDto.units) {
+      // Ép kiểu 'any' ở đây để TypeScript không báo lỗi thiếu thuộc tính 'id'
+      const unitsArray = updateProductDto.units as any[];
+
+      const incomingUnitIds = unitsArray
+        .filter(u => u.id) 
+        .map(u => u.id);
+
+      const unitsToDelete = product.product_units.filter(
+        originalUnit => !incomingUnitIds.includes(originalUnit.id)
+      );
+
+      if (unitsToDelete.length > 0) {
+        await this.productRepository.manager.remove(unitsToDelete);
+      }
+    }
+  
+
+    // 3. Merge và Lưu
+    const updatedProduct = this.productRepository.merge(product, {
+      ...updateProductDto,
+      product_units: updateProductDto.units as any,
+    });
+
+    return await this.productRepository.save(updatedProduct);
+  }
+}
+
+  async remove(id: number) {
+    const product = await this.findOne(id); // Tận dụng hàm findOne đã viết ở trên
+    return await this.productRepository.remove(product);
   }
 }

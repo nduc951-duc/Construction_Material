@@ -1,24 +1,28 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule } from '@nestjs/config'; // Nhớ cài: npm i @nestjs/config
+import { ConfigModule } from '@nestjs/config'; 
 import { ProductsModule } from './products/products.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
-    // Load file .env
-    ConfigModule.forRoot(), 
+    // 1. Load biến môi trường từ file .env
+    ConfigModule.forRoot({
+      isGlobal: true, // Để dùng được biến môi trường ở mọi nơi không cần import lại
+    }), 
 
-    // Kết nối Database
+    // 2. Kết nối Database dùng biến môi trường
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: 'localhost',      // Chạy trên máy mình
-      port: 5432,             // Cổng mặc định
-      username: 'postgres',   // Tên đăng nhập mặc định
-      password: '123456',     // Mật khẩu bạn vừa đặt lúc cài
-      database: 'construction_db', // Tên DB vừa tạo
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT || '5432'), // Chuyển chuỗi thành số
+      username: process.env.DB_USERNAME,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
       autoLoadEntities: true,
-      synchronize: true,
-    }), ProductsModule,
+      synchronize: true, // Dev mode: true. Khi deploy nhớ đổi thành false
+    }), 
+    ProductsModule, OrdersModule,
   ],
   controllers: [],
   providers: [],

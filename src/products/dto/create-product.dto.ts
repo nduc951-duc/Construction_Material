@@ -1,42 +1,47 @@
-// src/products/dto/create-product.dto.ts
+import { ApiProperty } from '@nestjs/swagger'; // <--- Import
 import { Type } from 'class-transformer';
 import { IsArray, IsBoolean, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 
-// 1. Định nghĩa khuôn cho từng Đơn vị tính (Unit)
 class CreateProductUnitDto {
+  @ApiProperty({ example: 'Bao 50kg', description: 'Tên đơn vị tính' }) // <--- Thêm dòng này
   @IsString()
   @IsNotEmpty()
-  unit_name: string; // Tên đơn vị (Bao, Kg...)
+  unit_name: string;
 
+  @ApiProperty({ example: 50, description: 'Hệ số quy đổi' })
   @IsNumber()
   @Min(0)
-  conversion_factor: number; // Hệ số quy đổi (phải > 0)
+  conversion_factor: number;
 
+  @ApiProperty({ example: 95000, description: 'Giá bán' })
   @IsNumber()
   @Min(0)
-  price: number; // Giá bán (phải > 0)
+  price: number;
 
+  @ApiProperty({ example: false })
   @IsBoolean()
-  is_base_unit: boolean; // Có phải đơn vị gốc không?
+  is_base_unit: boolean;
 }
 
-// 2. Định nghĩa khuôn cho Sản phẩm (Product)
 export class CreateProductDto {
+  @ApiProperty({ example: 'Xi măng Hà Tiên' })
   @IsString()
   @IsNotEmpty()
-  name: string; // Tên sản phẩm
+  name: string;
 
+  @ApiProperty({ example: 'XM-HT-001' })
   @IsString()
   @IsNotEmpty()
-  code: string; // Mã SKU
+  code: string;
 
+  @ApiProperty({ required: false, example: 'https://anh.com/xm.jpg' })
   @IsString()
   @IsOptional()
   image_url?: string;
 
-  // Quan trọng: Validate mảng các đơn vị con
+  @ApiProperty({ type: [CreateProductUnitDto] }) // <--- Quan trọng: Báo cho Swagger biết đây là mảng
   @IsArray()
-  @ValidateNested({ each: true }) // Kiểm tra kỹ từng phần tử bên trong
+  @ValidateNested({ each: true })
   @Type(() => CreateProductUnitDto)
   units: CreateProductUnitDto[];
 }
